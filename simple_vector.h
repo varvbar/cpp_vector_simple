@@ -79,12 +79,18 @@ public:
     // Конструктор присваивания
     SimpleVector& operator=(const SimpleVector& rhs) {
         
-        if (rhs.cbegin() == cbegin()) {
-            return *this;
+        if (this != &rhs) {
+
+            SimpleVector tmp (rhs);
+            swap(tmp);
+        
         }
 
-        SimpleVector tmp (rhs);
-        swap(tmp);
+        if (rhs.IsEmpty()) {
+
+            Clear();
+
+        }
 
         return *this;
     }
@@ -155,17 +161,17 @@ public:
         
         if (size_ == 0 && capacity_ == 0) {
             Resize(1);
-            std::exchange(items_[0], std::move(item));
+            items_[0] = std::move(item);
         }
         else if (size_ < capacity_) {
-            std::exchange(items_[size_], std::move(item));
+            items_[size_] = std::move(item);
             ++size_;
         }
         else {
-            int old_size = size_;
+            size_t old_size = size_;
             Resize(capacity_ * 2);
             size_ = old_size;
-            std::exchange(items_[size_], std::move(item));
+            items_[size_] = std::move(item);
             ++size_;
             
         }
@@ -177,26 +183,14 @@ public:
     // вместимость вектора должна увеличиться вдвое, а для вектора вместимостью 0 стать равной 1
     Iterator Insert(ConstIterator pos, const Type& value) {
 
-        assert(!(pos < begin()));
-        assert(!(pos > end()));
+        assert(pos >= begin());
+        assert(pos <= end());
 
         auto pos_number = pos - begin();
-        Iterator pos_temp {begin() + pos_number};
 
-        if(size_ == 0 && capacity_ == 0) {
-            
-            ArrayPtr<Type> temp(1);
-            temp[0] = value;
-            items_.swap(temp);
-            //items_[0] = value;
+        if (size_ < capacity_) {
 
-            ++size_;
-            ++capacity_;
-            return Iterator{begin()};
-        
-        }
-        else if (size_ < capacity_) {
-            
+            Iterator pos_temp {begin() + pos_number};
             std::copy_backward(pos_temp, end(), end() + 1);
             items_[static_cast<size_t> (pos_number)] = value;
             ++size_;
@@ -204,18 +198,22 @@ public:
 
         }
         else {
-            const size_t new_capacity = capacity_ * 2;
+            size_t new_capacity = capacity_ * 2;
+            
+            if (new_capacity == 0) {
+                new_capacity = 1;
+            }
+            size_t old_size = size_;
+            Resize(new_capacity);
+            size_ = old_size + 1;
+            Iterator pos_temp {begin() + pos_number};
+
             ArrayPtr<Type> temp(new_capacity);
-            std::fill(&temp[0], &temp[new_capacity - 1], 0);
-    
-            Iterator it_pos = std::copy(begin(), pos_temp, &temp[0]);
 
             temp[pos_number] = value;
-            std::copy(pos_temp, end(), it_pos + 1);
-
+            std::copy(pos_temp, end(), pos_temp + 1);
             items_.swap(temp);
-            capacity_ = new_capacity;
-            ++size_;
+            
             return Iterator {begin() + pos_number};
             
         }
@@ -224,40 +222,42 @@ public:
     // Insert перемещением
     Iterator Insert(ConstIterator pos, Type&& value) {
 
-        assert(!(pos < begin()));
-        assert(!(pos > end()));
+        assert(pos >= begin());
+        assert(pos <= end());
 
         auto pos_number = pos - begin();
-        Iterator pos_temp {begin() + pos_number};
+       
 
-        if(size_ == 0 && capacity_ == 0) {
+        if (size_ < capacity_) {
             
-            Resize(1);
-            std::exchange(items_[0], std::move(value));
-            //++size_;
-            //++capacity_;
-            return Iterator{begin()};
-        
-        }
-        else if (size_ < capacity_) {
+            Iterator pos_temp {begin() + pos_number};
             
             std::move_backward(pos_temp, end(), end() + 1);
-            std::exchange(items_[pos_number], std::move(value));
+            items_[pos_number] = std::move(value);
             ++size_;
             return Iterator {begin() + pos_number};
 
         }
         else {
-            const size_t new_capacity = capacity_ * 2;
-            ArrayPtr<Type> temp(new_capacity);
-            MoveFill(temp.Get(), temp.Get() +  new_capacity - 1);
-            std::move(begin(), pos_temp, temp.Get());
-            std::exchange(temp[pos_number], std::move(value));
-            std::move(pos_temp, end(), temp.Get() + pos_number + 1);
 
+            
+            size_t new_capacity = capacity_ * 2;
+
+            if (new_capacity == 0) {
+                new_capacity = 1;
+            }
+            
+            size_t old_size = size_;
+            Resize(new_capacity);
+            size_ = old_size + 1;
+            Iterator pos_temp {begin() + pos_number};
+
+            ArrayPtr<Type> temp(new_capacity);
+            std::move(begin(), pos_temp, temp.Get());
+            temp[pos_number] = std::move(value);
+            std::move(pos_temp, end(), temp.Get() + pos_number + 1);
             items_.swap(temp);
-            capacity_ = new_capacity;
-            ++size_;
+            
             return Iterator {begin() + pos_number};
             
         }
@@ -275,9 +275,8 @@ public:
     // Удаляет элемент вектора в указанной позиции
     Iterator Erase(ConstIterator pos) {
         
-        assert(!(pos == nullptr));
-        assert(!(pos < begin()));
-        assert(!(pos >= end()));
+        assert(pos >= begin());
+        assert(pos < end());
 
         std::move(Iterator(pos + 1), end(), Iterator(pos));
         --size_;
@@ -436,7 +435,6 @@ private:
 
     void MoveFill(Iterator first, Iterator last)
     {
-        //assert(first < last);
         while (first < last)
         {
             *first = std::move(Type());

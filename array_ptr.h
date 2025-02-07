@@ -83,7 +83,7 @@ public:
     // Возвращает true, если указатель ненулевой, и false в противном случае
     explicit operator bool() const {
         
-        return raw_ptr_? true : false;
+        return raw_ptr_ == nullptr ? true : false;
     }
 
     // Возвращает значение сырого указателя, хранящего адрес начала массива
